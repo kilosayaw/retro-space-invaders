@@ -29,6 +29,12 @@ export const POWERUP_HEIGHT = 24;
 export const POWERUP_SPEED = 2;
 export const POWERUP_SPAWN_CHANCE = 0.15;
 
+// BASE CONSTANTS - ADD THESE!
+export const BASE_WIDTH = 80;
+export const BASE_HEIGHT = 60;
+export const BASE_Y = 450;
+export const NUM_BASES = 4;
+
 export const POINTS_ALIEN_TOP = 30;
 export const POINTS_ALIEN_MIDDLE = 20;
 export const POINTS_ALIEN_BOTTOM = 10;
@@ -46,4 +52,5 @@ export const COLORS = {
   powerupShield: '#00aaff',
   explosion: ['#ffff00', '#ff8800', '#ff0000'],
   ui: '#00ff41',
+  base: '#00ff41', // ADD THIS!
 };
