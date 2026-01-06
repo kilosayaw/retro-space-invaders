@@ -3,30 +3,18 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-export interface Profile {
-  id: string;
-  username: string;
-  created_at: string;
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables');
 }
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export interface HighScore {
   id: string;
-  user_id: string;
+  user_id?: string;
   username: string;
   score: number;
   wave_reached: number;
   aliens_defeated: number;
   achieved_at: string;
-}
-
-export interface PlayerStats {
-  user_id: string;
-  games_played: number;
-  best_score: number;
-  total_aliens_defeated: number;
-  total_waves_completed: number;
-  last_played: string;
-  updated_at: string;
 }
