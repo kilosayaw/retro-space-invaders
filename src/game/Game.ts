@@ -19,6 +19,9 @@ import {
   POINTS_ALIEN_TOP,
   POINTS_ALIEN_MIDDLE,
   POINTS_ALIEN_BOTTOM,
+  BASE_WIDTH,
+  BASE_Y,
+  NUM_BASES,
   COLORS,
 } from './constants';
 import {
@@ -29,6 +32,7 @@ import {
   PowerUp,
   PowerUpType,
   Particle,
+  Base,
 } from './entities';
 import { audioManager } from './audio';
 
@@ -48,6 +52,7 @@ export class Game {
   alienBullets: AlienBullet[] = [];
   powerUps: PowerUp[] = [];
   particles: Particle[] = [];
+  bases: Base[] = [];
 
   alienDirection: number = 1;
   alienSpeed: number = ALIEN_START_SPEED;
@@ -74,6 +79,7 @@ export class Game {
     );
 
     this.setupEventListeners();
+    this.spawnBases();
   }
 
   setupEventListeners() {
@@ -96,6 +102,16 @@ export class Game {
     });
   }
 
+  spawnBases() {
+    this.bases = [];
+    const spacing = CANVAS_WIDTH / (NUM_BASES + 1);
+
+    for (let i = 0; i < NUM_BASES; i++) {
+      const x = spacing * (i + 1) - BASE_WIDTH / 2;
+      this.bases.push(new Base(x, BASE_Y));
+    }
+  }
+
   startGame() {
     this.state = 'playing';
     this.score = 0;
@@ -112,6 +128,7 @@ export class Game {
     this.particles = [];
     this.alienSpeed = ALIEN_START_SPEED;
     this.spawnAliens();
+    this.spawnBases();
   }
 
   spawnAliens() {
@@ -154,6 +171,7 @@ export class Game {
         this.wave++;
         this.alienSpeed += ALIEN_SPEED_INCREMENT;
         this.spawnAliens();
+        this.spawnBases();
         this.alienDirection = 1;
         this.bullets = [];
         this.alienBullets = [];
@@ -215,6 +233,9 @@ export class Game {
     this.checkCollisions();
     this.alienShoot();
 
+    // Clean up destroyed bases
+    this.bases = this.bases.filter(base => !base.isEmpty());
+
     this.particles = this.particles.filter((particle) => {
       particle.update();
       return !particle.isDead();
@@ -266,10 +287,15 @@ export class Game {
   }
 
   checkCollisions() {
+    // Player bullets vs aliens
     this.bullets.forEach((bullet, bulletIndex) => {
+      let bulletDestroyed = false;
+
+      // Check alien collisions
       this.aliens.forEach((alien, alienIndex) => {
-        if (this.checkCollision(bullet, alien)) {
+        if (!bulletDestroyed && this.checkCollision(bullet, alien)) {
           this.bullets.splice(bulletIndex, 1);
+          bulletDestroyed = true;
           this.aliens.splice(alienIndex, 1);
           this.aliensDefeated++;
 
@@ -286,10 +312,34 @@ export class Game {
           }
         }
       });
+
+      // Check base collisions for player bullets
+      if (!bulletDestroyed) {
+        this.bases.forEach((base) => {
+          if (base.checkCollision(bullet.x, bullet.y, bullet.width, bullet.height)) {
+            base.damageAt(bullet.x + bullet.width / 2, bullet.y, 2);
+            this.bullets.splice(bulletIndex, 1);
+            bulletDestroyed = true;
+          }
+        });
+      }
     });
 
+    // Alien bullets vs player
     this.alienBullets.forEach((bullet, bulletIndex) => {
-      if (this.checkCollision(bullet, this.player)) {
+      let bulletDestroyed = false;
+
+      // Check base collisions for alien bullets
+      this.bases.forEach((base) => {
+        if (!bulletDestroyed && base.checkCollision(bullet.x, bullet.y, bullet.width, bullet.height)) {
+          base.damageAt(bullet.x + bullet.width / 2, bullet.y + bullet.height, 2);
+          this.alienBullets.splice(bulletIndex, 1);
+          bulletDestroyed = true;
+        }
+      });
+
+      // Check player collision
+      if (!bulletDestroyed && this.checkCollision(bullet, this.player)) {
         this.alienBullets.splice(bulletIndex, 1);
 
         if (!this.player.shield) {
@@ -304,6 +354,7 @@ export class Game {
       }
     });
 
+    // Power-ups
     this.powerUps.forEach((powerUp, powerUpIndex) => {
       if (this.checkCollision(powerUp, this.player)) {
         this.powerUps.splice(powerUpIndex, 1);
@@ -356,6 +407,7 @@ export class Game {
     if (this.state === 'menu') {
       this.drawMenu();
     } else if (this.state === 'playing' || this.state === 'paused' || this.state === 'waveComplete') {
+      this.bases.forEach((base) => base.draw(this.ctx));
       this.player.draw(this.ctx);
       this.aliens.forEach((alien) => alien.draw(this.ctx));
       this.bullets.forEach((bullet) => bullet.draw(this.ctx));
