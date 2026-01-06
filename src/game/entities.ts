@@ -9,6 +9,8 @@ import {
   ALIEN_BULLET_HEIGHT,
   POWERUP_WIDTH,
   POWERUP_HEIGHT,
+  BASE_WIDTH,
+  BASE_HEIGHT,
   COLORS,
 } from './constants';
 
@@ -54,6 +56,112 @@ export class Player {
       ctx.beginPath();
       ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width / 2 + 4, 0, Math.PI * 2);
       ctx.stroke();
+    }
+  }
+}
+
+export class Base {
+  x: number;
+  y: number;
+  width = BASE_WIDTH;
+  height = BASE_HEIGHT;
+  pixels: boolean[][];
+
+  constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+    this.pixels = this.createBaseShape();
+  }
+
+  createBaseShape(): boolean[][] {
+    // Create classic Space Invaders base shape (dome with legs)
+    const shape: boolean[][] = [];
+    const w = BASE_WIDTH / 4; // 4x4 pixel blocks
+    const h = BASE_HEIGHT / 4;
+
+    for (let y = 0; y < h; y++) {
+      shape[y] = [];
+      for (let x = 0; x < w; x++) {
+        // Create dome shape
+        if (y === 0) {
+          shape[y][x] = x >= 3 && x <= w - 4;
+        } else if (y === 1) {
+          shape[y][x] = x >= 2 && x <= w - 3;
+        } else if (y === 2) {
+          shape[y][x] = x >= 1 && x <= w - 2;
+        } else if (y === 3 || y === 4) {
+          shape[y][x] = x >= 0 && x <= w - 1;
+        } else if (y === 5) {
+          // Create gaps (legs)
+          shape[y][x] = (x >= 0 && x <= 4) || (x >= w - 5 && x <= w - 1);
+        } else {
+          // Legs continue
+          shape[y][x] = (x >= 0 && x <= 3) || (x >= w - 4 && x <= w - 1);
+        }
+      }
+    }
+
+    return shape;
+  }
+
+  damageAt(x: number, y: number, radius: number = 2) {
+    // Convert world coordinates to local pixel coordinates
+    const localX = Math.floor((x - this.x) / 4);
+    const localY = Math.floor((y - this.y) / 4);
+
+    // Damage pixels in radius
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        const px = localX + dx;
+        const py = localY + dy;
+
+        if (py >= 0 && py < this.pixels.length && px >= 0 && px < this.pixels[0].length) {
+          // Circular damage pattern
+          if (dx * dx + dy * dy <= radius * radius) {
+            this.pixels[py][px] = false;
+          }
+        }
+      }
+    }
+  }
+
+  checkCollision(x: number, y: number, width: number, height: number): boolean {
+    // Check if any part of the bullet overlaps with existing pixels
+    const startX = Math.max(0, Math.floor((x - this.x) / 4));
+    const endX = Math.min(this.pixels[0].length - 1, Math.floor((x + width - this.x) / 4));
+    const startY = Math.max(0, Math.floor((y - this.y) / 4));
+    const endY = Math.min(this.pixels.length - 1, Math.floor((y + height - this.y) / 4));
+
+    for (let py = startY; py <= endY; py++) {
+      for (let px = startX; px <= endX; px++) {
+        if (this.pixels[py] && this.pixels[py][px]) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  isEmpty(): boolean {
+    return this.pixels.every(row => row.every(pixel => !pixel));
+  }
+
+  draw(ctx: CanvasRenderingContext2D) {
+    ctx.fillStyle = COLORS.base;
+    const blockSize = 4;
+
+    for (let y = 0; y < this.pixels.length; y++) {
+      for (let x = 0; x < this.pixels[y].length; x++) {
+        if (this.pixels[y][x]) {
+          ctx.fillRect(
+            this.x + x * blockSize,
+            this.y + y * blockSize,
+            blockSize,
+            blockSize
+          );
+        }
+      }
     }
   }
 }
