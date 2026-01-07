@@ -13,9 +13,11 @@ import {
   ALIEN_SPEED_INCREMENT,
   BULLET_SPEED,
   ALIEN_BULLET_SPEED,
-  ALIEN_SHOOT_CHANCE,
+  ALIEN_SHOOT_CHANCE_BASE,
+  ALIEN_SHOOT_CHANCE_INCREMENT,
   POWERUP_SPEED,
   POWERUP_SPAWN_CHANCE,
+  POWERUP_MIN_KILLS,
   POINTS_ALIEN_TOP,
   POINTS_ALIEN_MIDDLE,
   POINTS_ALIEN_BOTTOM,
@@ -45,6 +47,7 @@ export class Game {
   score: number = 0;
   wave: number = 1;
   aliensDefeated: number = 0;
+  aliensDefeatedThisWave: number = 0;
 
   player: Player;
   aliens: Alien[] = [];
@@ -56,6 +59,7 @@ export class Game {
 
   alienDirection: number = 1;
   alienSpeed: number = ALIEN_START_SPEED;
+  alienShootChance: number = ALIEN_SHOOT_CHANCE_BASE;
   alienMoveDown: boolean = false;
   alienAnimTimer: number = 0;
 
@@ -117,6 +121,7 @@ export class Game {
     this.score = 0;
     this.wave = 1;
     this.aliensDefeated = 0;
+    this.aliensDefeatedThisWave = 0;
     this.player.lives = PLAYER_LIVES;
     this.player.shield = false;
     this.player.rapidFire = false;
@@ -127,12 +132,14 @@ export class Game {
     this.powerUps = [];
     this.particles = [];
     this.alienSpeed = ALIEN_START_SPEED;
+    this.alienShootChance = ALIEN_SHOOT_CHANCE_BASE;
     this.spawnAliens();
-    this.spawnBases();
+    this.spawnBases(); // Only spawn bases at game start
   }
 
   spawnAliens() {
     this.aliens = [];
+    this.aliensDefeatedThisWave = 0;
     const totalWidth = ALIEN_COLS * (ALIEN_WIDTH + ALIEN_PADDING);
     const startX = (CANVAS_WIDTH - totalWidth) / 2;
 
@@ -170,11 +177,12 @@ export class Game {
       if (this.waveCompleteTimer <= 0) {
         this.wave++;
         this.alienSpeed += ALIEN_SPEED_INCREMENT;
+        this.alienShootChance += ALIEN_SHOOT_CHANCE_INCREMENT;
         this.spawnAliens();
-        this.spawnBases();
         this.alienDirection = 1;
         this.bullets = [];
         this.alienBullets = [];
+        // DON'T respawn bases - damage persists!
         this.state = 'playing';
       }
 
@@ -278,7 +286,7 @@ export class Game {
 
   alienShoot() {
     this.aliens.forEach((alien) => {
-      if (Math.random() < ALIEN_SHOOT_CHANCE) {
+      if (Math.random() < this.alienShootChance) {
         this.alienBullets.push(
           new AlienBullet(alien.x + alien.width / 2 - 2, alien.y + alien.height)
         );
@@ -298,6 +306,7 @@ export class Game {
           bulletDestroyed = true;
           this.aliens.splice(alienIndex, 1);
           this.aliensDefeated++;
+          this.aliensDefeatedThisWave++;
 
           const points = alien.type === 0 ? POINTS_ALIEN_TOP : alien.type === 1 ? POINTS_ALIEN_MIDDLE : POINTS_ALIEN_BOTTOM;
           this.score += points;
@@ -305,7 +314,8 @@ export class Game {
           audioManager.playExplosion();
           this.createExplosion(alien.x + alien.width / 2, alien.y + alien.height / 2);
 
-          if (Math.random() < POWERUP_SPAWN_CHANCE) {
+          // Only spawn power-ups after minimum kills AND with reduced chance
+          if (this.aliensDefeatedThisWave >= POWERUP_MIN_KILLS && Math.random() < POWERUP_SPAWN_CHANCE) {
             const types: PowerUpType[] = ['multiShot', 'rapidFire', 'shield'];
             const type = types[Math.floor(Math.random() * types.length)];
             this.powerUps.push(new PowerUp(alien.x, alien.y, type));
@@ -325,7 +335,22 @@ export class Game {
       }
     });
 
-    // Alien bullets vs player
+    // Player bullets vs alien bullets (bullet collision feature!)
+    this.bullets.forEach((playerBullet, pbIndex) => {
+      this.alienBullets.forEach((alienBullet, abIndex) => {
+        if (this.checkCollision(playerBullet, alienBullet)) {
+          // Destroy both bullets
+          this.bullets.splice(pbIndex, 1);
+          this.alienBullets.splice(abIndex, 1);
+          // Small particle effect
+          for (let i = 0; i < 3; i++) {
+            this.particles.push(new Particle(playerBullet.x, playerBullet.y));
+          }
+        }
+      });
+    });
+
+    // Alien bullets vs bases and player
     this.alienBullets.forEach((bullet, bulletIndex) => {
       let bulletDestroyed = false;
 
@@ -338,8 +363,8 @@ export class Game {
         }
       });
 
-      // Check player collision
-      if (!bulletDestroyed && this.checkCollision(bullet, this.player)) {
+      // Check player collision - MORE PRECISE HITBOX
+      if (!bulletDestroyed && this.checkPreciseCollision(bullet, this.player)) {
         this.alienBullets.splice(bulletIndex, 1);
 
         if (!this.player.shield) {
@@ -366,6 +391,18 @@ export class Game {
 
   checkCollision(a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) {
     return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+  }
+
+  // More precise collision for player hits - smaller hitbox
+  checkPreciseCollision(bullet: { x: number; y: number; width: number; height: number }, player: { x: number; y: number; width: number; height: number }) {
+    // Reduce player hitbox by 4 pixels on each side for more forgiving gameplay
+    const margin = 4;
+    return (
+      bullet.x < player.x + player.width - margin &&
+      bullet.x + bullet.width > player.x + margin &&
+      bullet.y < player.y + player.height - margin &&
+      bullet.y + bullet.height > player.y + margin
+    );
   }
 
   activatePowerUp(type: PowerUpType) {
